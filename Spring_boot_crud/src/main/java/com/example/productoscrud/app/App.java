@@ -5,6 +5,9 @@ import com.example.productoscrud.application.service.ProductService;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Qualifier;
+import com.example.productoscrud.application.ports.ProductAggregationRepository;
+import com.example.productoscrud.application.service.ProductQueryService;
 
 @SpringBootApplication(scanBasePackages = "com.example.productoscrud")
 public class App {
@@ -12,9 +15,19 @@ public class App {
         SpringApplication.run(App.class, args);
     }
 
-    @Bean
-    public ProductService productService(ProductRepository productRepository) {
+    @Bean("mysqlProductService")
+    public ProductService productService(@Qualifier("productRepositoryMySQL") ProductRepository productRepository) {
         return new ProductService(productRepository);
+    }
+
+    @Bean("mongoProductService")
+    public ProductService mongoProductService(@Qualifier("productRepositoryMongoDB") ProductRepository repository) {
+        return new ProductService(repository);
+    }
+
+    @Bean
+    public ProductQueryService productQueryService(ProductAggregationRepository repository) {
+        return new ProductQueryService(repository);
     }
 }
 

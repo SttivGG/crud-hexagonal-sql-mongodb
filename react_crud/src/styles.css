@@ -1,4 +1,6 @@
 :root { font-family: system-ui, sans-serif; color: #17243a; background: #f3f6fb; }
+:root { --acento: #2463cb; line-height: 1.5; }
+[data-database="mongodb"] { --acento: #167046; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 .contenedor { max-width: 1100px; margin: auto; padding: 32px 20px 60px; }
@@ -13,7 +15,7 @@ label { display: grid; gap: 8px; font-weight: 600; }
 .ancho { grid-column: 1 / -1; }
 input { width: 100%; border: 1px solid #b9c7d9; border-radius: 8px; padding: 11px 12px; font: inherit; }
 input:focus { outline: 2px solid #75a5ed; border-color: #2463cb; }
-button { border: 0; border-radius: 8px; padding: 10px 14px; background: #2463cb; color: white; font: inherit; font-weight: 600; cursor: pointer; }
+button { min-height: 44px; border: 0; border-radius: 8px; padding: 10px 14px; background: var(--acento); color: white; font: inherit; font-weight: 600; cursor: pointer; }
 button:hover { filter: brightness(.94); }
 button:disabled { cursor: wait; opacity: .65; }
 .secundario { background: #e8eef8; color: #244877; }
@@ -29,3 +31,30 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 13px 10px; border-bottom: 1px solid #e3eaf2; }
 th { color: #53647d; font-size: .9rem; }
 @media (max-width: 640px) { form { grid-template-columns: 1fr; } .tarjeta { padding: 18px; } .acciones-fila { flex-wrap: wrap; } }
+fieldset.campos-producto { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border: 0; margin: 0; padding: 0; min-width: 0; grid-column: 1 / -1; }
+select { width: 100%; min-height: 44px; border: 1px solid #b9c7d9; border-radius: 8px; padding: 11px 12px; background: white; color: inherit; font: inherit; }
+button:focus-visible, select:focus-visible, pre:focus-visible, .tabla-contenedor:focus-visible { outline: 3px solid #2463cb; outline-offset: 3px; }
+.selector-db { display: flex; gap: 12px; margin: 24px 0 16px; }
+.selector-db button { flex: 1; max-width: 250px; text-align: left; border: 2px solid transparent; padding: 14px 18px; }
+.selector-db .seleccionado { border-color: var(--acento); }
+.selector-db small { display: block; font-weight: 400; font-size: .85rem; margin-top: 3px; }
+.tecnologia { font-size: .95rem; }
+.tecnologia strong { color: var(--acento); }
+.contador { font-size: .85rem; color: #53647d; background: #e8eef8; padding: 3px 9px; border-radius: 20px; }
+.ayuda { color: #53647d; margin-top: -8px; max-width: 70ch; }
+.filtros form { margin-bottom: 20px; }
+.resultado { border-top: 1px solid #dce4ee; padding-top: 12px; }
+.resultado .cabecera-lista { margin-top: 24px; }
+pre { padding: 20px; border-radius: 10px; background: #15243a; color: #e4edf9; overflow: auto; font-size: .9rem; line-height: 1.65; }
+.estadisticas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.estadisticas div { padding: 16px; border-radius: 10px; background: #f3f6fb; }
+dt { color: #53647d; font-size: .85rem; } dd { margin: 8px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.precio { font-variant-numeric: tabular-nums; white-space: nowrap; }
+td { overflow-wrap: anywhere; } .vacio { text-align: center; color: #53647d; padding: 28px; }
+@media (max-width: 640px) {
+  fieldset.campos-producto { grid-template-columns: 1fr; }
+  .cabecera-lista { align-items: flex-start; flex-wrap: wrap; }
+  .estadisticas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .selector-db button { padding: 12px; }
+  th, td { min-width: 90px; } .acciones { flex-wrap: wrap; }
+}

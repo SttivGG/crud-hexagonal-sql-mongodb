@@ -1,22 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import DatabaseSelector from './components/DatabaseSelector.jsx'
+import ProductForm from './components/ProductForm.jsx'
+import ProductTable from './components/ProductTable.jsx'
+import MongoFilters from './components/MongoFilters.jsx'
+import { rutaProductos, solicitar } from './services/api.js'
 
-const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8081').replace(/\/$/, '')
 const formularioVacio = { name: '', price: '', description: '' }
 
-async function solicitar(ruta, opciones) {
-  const respuesta = await fetch(`${apiUrl}${ruta}`, opciones)
-  if (!respuesta.ok) {
-    const detalle = respuesta.status === 400
-      ? await respuesta.text()
-      : respuesta.status === 500
-        ? 'Error del backend: comprueba que MySQL y productoscruddb estén activos.'
-        : `Error HTTP ${respuesta.status}`
-    throw new Error(detalle)
-  }
-  return respuesta.status === 204 ? null : respuesta.json()
-}
-
-function App() {
+// Cada cambio de tecnología desmonta la sesión y cancela sus peticiones.
+function ProductWorkspace({ database }) {
   const [productos, setProductos] = useState([])
   const [formulario, setFormulario] = useState(formularioVacio)
   const [editandoId, setEditandoId] = useState(null)
@@ -24,144 +16,105 @@ function App() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [mensaje, setMensaje] = useState('')
+  const [revision, setRevision] = useState(0)
+  const vida = useRef(null)
+  const lectura = useRef(null)
+  const base = rutaProductos(database)
 
-  async function cargarProductos() {
+  useEffect(() => {
+    const controller = new AbortController()
+    vida.current = controller
+    cargarProductos(controller.signal)
+    return () => { controller.abort(); lectura.current?.abort() }
+  }, [database])
+
+  async function cargarProductos(signal = vida.current?.signal) {
+    lectura.current?.abort()
+    const controller = new AbortController()
+    lectura.current = controller
     setCargando(true)
     try {
-      setProductos(await solicitar('/productos'))
-      setError('')
+      const datos = await solicitar(base, { signal: controller.signal })
+      if (!signal?.aborted && !controller.signal.aborted) { setProductos(datos); setError('') }
     } catch (fallo) {
-      setError(fallo.message === 'Failed to fetch'
-        ? 'No se pudo conectar con Spring Boot. Revisa que el CRUD esté activo en el puerto 8081.'
-        : fallo.message)
+      if (!signal?.aborted && !controller.signal.aborted) setError(fallo.message)
     } finally {
-      setCargando(false)
+      if (!signal?.aborted && !controller.signal.aborted) setCargando(false)
     }
   }
 
-  useEffect(() => { cargarProductos() }, [])
-
-  function cambiarCampo(evento) {
-    setFormulario({ ...formulario, [evento.target.name]: evento.target.value })
-  }
+  function cancelar() { setEditandoId(null); setFormulario(formularioVacio) }
 
   function editar(producto) {
     setEditandoId(producto.id)
-    setFormulario({
-      name: producto.name,
-      price: String(producto.price),
-      description: producto.description
-    })
+    setFormulario({ name: producto.name, price: String(producto.price), description: producto.description })
     setMensaje('')
     setError('')
+    document.querySelector('input[name="name"]')?.focus()
   }
 
-  function cancelar() {
-    setEditandoId(null)
-    setFormulario(formularioVacio)
-  }
-
-  async function guardar(evento) {
-    evento.preventDefault()
+  async function mutar(operacion, exito) {
+    const signal = vida.current.signal
     setGuardando(true)
     setError('')
     setMensaje('')
     try {
-      const producto = {
-        name: formulario.name.trim(),
-        price: Number(formulario.price),
-        description: formulario.description.trim()
-      }
-      const ruta = editandoId === null ? '/productos' : `/productos/${editandoId}`
-      await solicitar(ruta, {
-        method: editandoId === null ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(producto)
-      })
-      setMensaje(editandoId === null ? 'Producto creado.' : 'Producto actualizado.')
+      await operacion(signal)
+      if (signal.aborted) return
       cancelar()
-      await cargarProductos()
+      setMensaje(exito)
+      setRevision((anterior) => anterior + 1)
+      await cargarProductos(signal)
     } catch (fallo) {
-      setError(fallo.message)
+      if (!signal.aborted) setError(fallo.message)
     } finally {
-      setGuardando(false)
+      if (!signal.aborted) setGuardando(false)
     }
+  }
+
+  async function guardar(evento) {
+    evento.preventDefault()
+    if (!formulario.name.trim()) { setError('El nombre es obligatorio.'); return }
+    // Enviar una cadena decimal evita redondear el importe con Number antes de llegar a Java.
+    const producto = { name: formulario.name.trim(), price: formulario.price, description: formulario.description.trim() }
+    await mutar((signal) => solicitar(editandoId === null ? base : `${base}/${editandoId}`, {
+      method: editandoId === null ? 'POST' : 'PUT', signal,
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(producto)
+    }), editandoId === null ? 'Producto creado.' : 'Producto actualizado.')
   }
 
   async function eliminar(producto) {
-    if (!window.confirm(`¿Eliminar ${producto.name}?`)) return
-    setError('')
-    setMensaje('')
-    try {
-      await solicitar(`/productos/${producto.id}`, { method: 'DELETE' })
-      if (editandoId === producto.id) cancelar()
-      setMensaje('Producto eliminado.')
-      await cargarProductos()
-    } catch (fallo) {
-      setError(fallo.message)
-    }
+    if (!window.confirm(`¿Eliminar ${producto.name} de ${database === 'mysql' ? 'MySQL' : 'MongoDB'}?`)) return
+    await mutar((signal) => solicitar(`${base}/${producto.id}`, { method: 'DELETE', signal }), 'Producto eliminado.')
   }
 
-  return (
-    <main className="contenedor">
-      <header>
-        <p className="etiqueta">Spring Boot + React</p>
-        <h1>CRUD de productos</h1>
-        <p>Consulta, crea, edita y elimina productos de la base de datos.</p>
-      </header>
-
-      <section className="tarjeta" aria-labelledby="titulo-formulario">
-        <h2 id="titulo-formulario">{editandoId === null ? 'Nuevo producto' : `Editar producto #${editandoId}`}</h2>
-        <form onSubmit={guardar}>
-          <label>Nombre
-            <input name="name" value={formulario.name} onChange={cambiarCampo} required maxLength="100" />
-          </label>
-          <label>Precio
-            <input name="price" type="number" value={formulario.price} onChange={cambiarCampo} required min="0" step="0.01" />
-          </label>
-          <label className="ancho">Descripción
-            <input name="description" value={formulario.description} onChange={cambiarCampo} maxLength="255" />
-          </label>
-          <div className="acciones ancho">
-            <button type="submit" disabled={guardando}>{guardando ? 'Guardando...' : editandoId === null ? 'Crear producto' : 'Guardar cambios'}</button>
-            {editandoId !== null && <button type="button" className="secundario" onClick={cancelar}>Cancelar</button>}
-          </div>
-        </form>
-      </section>
-
-      {error && <p role="alert" className="aviso error">{error}</p>}
-      {mensaje && <p role="status" className="aviso exito">{mensaje}</p>}
-
-      <section className="tarjeta" aria-labelledby="titulo-lista">
-        <div className="cabecera-lista">
-          <h2 id="titulo-lista">Productos</h2>
-          <button type="button" className="secundario" onClick={cargarProductos}>Actualizar lista</button>
-        </div>
-        {cargando ? <p>Cargando productos...</p> : (
-          <div className="tabla-contenedor">
-            <table>
-              <thead><tr><th>ID</th><th>Nombre</th><th>Precio</th><th>Descripción</th><th>Acciones</th></tr></thead>
-              <tbody>
-                {productos.map((producto) => (
-                  <tr key={producto.id}>
-                    <td>{producto.id}</td>
-                    <td>{producto.name}</td>
-                    <td>{producto.price}</td>
-                    <td>{producto.description}</td>
-                    <td className="acciones-fila">
-                      <button type="button" className="secundario" onClick={() => editar(producto)}>Editar</button>
-                      <button type="button" className="peligro" onClick={() => eliminar(producto)}>Eliminar</button>
-                    </td>
-                  </tr>
-                ))}
-                {productos.length === 0 && <tr><td colSpan="5">No hay productos todavía.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </main>
-  )
+  return <>
+    <ProductForm formulario={formulario} editandoId={editandoId} guardando={guardando}
+      onChange={(evento) => setFormulario({ ...formulario, [evento.target.name]: evento.target.value })}
+      onSubmit={guardar} onCancel={cancelar} />
+    {error && <p role="alert" className="aviso error">{error}</p>}
+    {mensaje && <p role="status" className="aviso exito">{mensaje}</p>}
+    <section className="tarjeta" aria-labelledby="titulo-lista" aria-busy={cargando}>
+      <div className="cabecera-lista">
+        <h2 id="titulo-lista">Productos <span className="contador">{productos.length}</span></h2>
+        <button type="button" className="secundario" disabled={cargando || guardando} onClick={() => cargarProductos()}>Actualizar lista</button>
+      </div>
+      {cargando ? <p role="status">Cargando productos…</p> : <ProductTable productos={productos} onEdit={editar} onDelete={eliminar} disabled={guardando} />}
+    </section>
+    {database === 'mongodb' && <MongoFilters key={revision} />}
+  </>
 }
 
-export default App
+export default function App() {
+  const [database, setDatabase] = useState('mysql')
+  return <main className="contenedor" data-database={database}>
+    <header>
+      <p className="etiqueta">Taller · Arquitectura hexagonal</p>
+      <h1>CRUD de productos</h1>
+      <p>Administra tu catálogo y explora sus datos.</p>
+      <DatabaseSelector database={database} onChange={setDatabase} />
+      <p className="tecnologia" role="status">Persistencia activa: <strong>{database === 'mysql' ? 'MySQL · SQL' : 'MongoDB · NoSQL'}</strong></p>
+    </header>
+    <ProductWorkspace key={database} database={database} />
+  </main>
+}
