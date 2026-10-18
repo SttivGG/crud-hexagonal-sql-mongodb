@@ -17,14 +17,18 @@ public class ProductService {
     }
 
     public Optional<Product> buscarPorId(int id) {
+        validarId(id);
         return productRepository.buscarPorId(id);
     }
 
     public Product crear(Product product) {
+        validar(product);
         return productRepository.crear(product);
     }
 
     public Optional<Product> actualizar(int id, Product product) {
+        validarId(id);
+        validar(product);
         if (!productRepository.actualizar(id, product)) {
             return Optional.empty();
         }
@@ -32,7 +36,18 @@ public class ProductService {
     }
 
     public boolean eliminar(int id) {
+        validarId(id);
         return productRepository.eliminar(id);
+    }
+
+    private void validarId(int id) {
+        if (id <= 0) throw new IllegalArgumentException("El ID debe ser un entero positivo");
+    }
+
+    private void validar(Product product) {
+        if (product == null || !product.esValido()) {
+            throw new IllegalArgumentException("Nombre, precio o descripción inválidos");
+        }
     }
 }
 
